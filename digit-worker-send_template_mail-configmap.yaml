@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sbf-worker-propertyinfo-config
+  namespace: camunda-workers
+data:
+  INT_MAIL: <intmail proxy>  # Set to correct value
+  TEMPLATE_URL: <template URL>  # Set to correct value

@@ -1,0 +1,53 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: digit-worker-send_template_mail
+  namespace: camunda-workers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: digit-worker-send_template_mail
+  template:
+    metadata:
+      labels:
+        app: digit-worker-send_template_mail
+    spec:
+      imagePullSecrets:
+      - name: ghcr-pull-secret
+      containers:
+        - name: digit-worker-send_template_mail
+          image: ghcr.io/haninge-digit/digit-worker-send_template_mail:main   # Set tag to "lab" for lab versions and "latest" for production versions
+          imagePullPolicy: Always
+          env:
+            - name: DEBUG
+              value: 'false'  # Change to 'true' for debugging
+            - name: ZEEBE_ADDRESS
+              value: camunda8-zeebe-gateway.camunda8:26500
+            - name: INT_MAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: digit-worker-send_template_mail-config
+                  key: INT_MAIL
+            - name: TEMPLATE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: digit-worker-send_template_mail-config
+                  key: TEMPLATE_URL
+          resources:    # Might need to be tailored
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          securityContext: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
