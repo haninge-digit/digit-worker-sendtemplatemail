@@ -1,22 +1,22 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: digit-worker-send_template_mail
+  name: digit-worker-send-template-mail
   namespace: camunda-workers
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: digit-worker-send_template_mail
+      app: digit-worker-send-template-mail
   template:
     metadata:
       labels:
-        app: digit-worker-send_template_mail
+        app: digit-worker-send-template-mail
     spec:
       imagePullSecrets:
       - name: ghcr-pull-secret
       containers:
-        - name: digit-worker-send_template_mail
+        - name: digit-worker-send-template-mail
           image: ghcr.io/haninge-digit/digit-worker-send_template_mail:main   # Set tag to "lab" for lab versions and "latest" for production versions
           imagePullPolicy: Always
           env:
@@ -27,12 +27,12 @@ spec:
             - name: INT_MAIL
               valueFrom:
                 configMapKeyRef:
-                  name: digit-worker-send_template_mail-config
+                  name: digit-worker-send-template-mail-config
                   key: INT_MAIL
             - name: TEMPLATE_URL
               valueFrom:
                 configMapKeyRef:
-                  name: digit-worker-send_template_mail-config
+                  name: digit-worker-send-template-mail-config
                   key: TEMPLATE_URL
           resources:    # Might need to be tailored
             limits:

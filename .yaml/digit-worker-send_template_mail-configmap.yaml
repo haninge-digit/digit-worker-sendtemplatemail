@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sbf-worker-propertyinfo-config
+  name: digit-worker-send-template-mail-config
   namespace: camunda-workers
 data:
   INT_MAIL: <intmail proxy>  # Set to correct value
