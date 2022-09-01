@@ -2,52 +2,47 @@ import os
 import logging
 import asyncio
 
-import grpc
-from zeebe_grpc import gateway_pb2_grpc
-from zeebe_grpc.gateway_pb2 import (
-    Resource,
-    DeployResourceRequest)
-
-from worker import worker_loop
-from send_template_mail import send_template_mail
+from SendTemplateMail import SendTemplateMail
 
 
-""" 
+"""
 Environment
 """
-ZEEBE_ADDRESS = os.getenv('ZEEBE_ADDRESS',"camunda-zeebe-gateway.camunda-zeebe:26500")
+RUN_ZEEBE_LOOP = os.getenv('RUN_ZEEBE_LOOP',"true") == "true"
+RUN_HTTP_SERVER = os.getenv('RUN_HTTP_SERVER',"false") == "true"
 
-DEBUG_MODE = os.getenv('DEBUG','false') == "true"                       # Global DEBUG logging
-
+DEBUG_MODE = os.getenv('DEBUG',"false") == "true"                       # Global DEBUG logging
 LOGFORMAT = "%(asctime)s %(funcName)-10s [%(levelname)s] %(message)s"   # Log format
-
-
-"""
-Deploy BPMN-worflow(s)
-"""
-def deployAllToCamunda():
-    with grpc.insecure_channel(ZEEBE_ADDRESS) as channel:
-        stub = gateway_pb2_grpc.GatewayStub(channel)
-        for f in os.listdir():      # Find all .bpmn-files
-            if ".bpmn" in f:
-                logging.info(f"Trying to deploy {f} to Camunda")
-                with open(f, "rb") as process_definition_file:
-                    process_definition = process_definition_file.read()
-                    process = Resource(name=f,content=process_definition)
-                    response = stub.DeployResource(DeployResourceRequest(resources=[process]))
-                    logging.info(f"Deployed BPMN process {response.deployments[0].process.bpmnProcessId} as version {response.deployments[0].process.version}")
 
 
 """
 MAIN function (starting point)
 """
-def main():
+def main():                 # noqa:E302
     # Enable logging. INFO is default. DEBUG if requested
     logging.basicConfig(level=logging.DEBUG if DEBUG_MODE else logging.INFO, format=LOGFORMAT)
 
-    deployAllToCamunda()        # Deploy worker process
+    loop = asyncio.new_event_loop()         # Create an async loop
 
-    asyncio.run(worker_loop(send_template_mail))     # Run worker in an async loop
+    worker = SendTemplateMail(loop)           # Create an instance of the worker
+
+    if RUN_ZEEBE_LOOP:
+        from zeebe_worker import worker_loop
+        zeebe_runner = loop.create_task(worker_loop(worker))       # Create Zeebe worker loop # noqa:F841
+
+    if RUN_HTTP_SERVER:
+        from http_server import http_server
+        http_runner = loop.create_task(http_server(worker))        # Create http server # noqa:F841
+
+    try:
+        asyncio.set_event_loop(loop)        # Make the create loop the event loop
+        loop.run_forever()                  # And run everything
+    except (KeyboardInterrupt):             # Until somebody hits wants to terminate
+        pass
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+
 
 
 if __name__ == "__main__":
