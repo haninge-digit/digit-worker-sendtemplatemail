@@ -47,7 +47,7 @@ class SendTemplateMail(object):
         email_template = jinja2.Environment().from_string(template_str)
 
         if '_JSON_BODY' in vars:
-            render_variables = vars['_JSON_BODY']       # All render variables are in the JSON body
+            render_variables = json.loads(vars['_JSON_BODY'])       # All render variables are in the JSON body as a string
         else:
             render_variables = vars                     # Just grab whats there (probably noting useful)
 
@@ -55,8 +55,8 @@ class SendTemplateMail(object):
 
         if 'mail_subject' in vars:
             mail_subject = vars['mail_subject']
-        elif '_JSON_BODY' in vars and 'header' in vars['_JSON_BODY']:
-            mail_subject = vars['_JSON_BODY']['header']
+        elif 'header' in render_variables:
+            mail_subject = render_variables['header']
         else:
             mail_subject = "Meddelande från Haninge Kommun"
 
