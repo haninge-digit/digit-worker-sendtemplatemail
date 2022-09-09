@@ -17,13 +17,14 @@ async def http_handler(request):
     # logging.info(f"Request for userinfo for {user_id}")
 
     query_args = dict(request.query)        # Grab all query args
-    query_args['HTTP_METHOD'] = request.method  # Add method
+    query_args['_HTTP_METHOD'] = request.method  # Add method
+    if request.can_read_body and request.content_type == 'application/json':
+        query_args['_JSON_BODY'] = await request.json()
 
-    worker = request.app['WORKER']      # Get worker refeence
+    worker = request.app['WORKER']      # Get worker reference
     resp = await worker(query_args)     # Run the worker
     
     return web.json_response(resp)      # Return the result
-
 
 
 async def http_server(worker):
