@@ -46,13 +46,25 @@ class SendTemplateMail(object):
         template_str = await self._load_template(vars['mail_template'])
         email_template = jinja2.Environment().from_string(template_str)
 
-        rendered_content = email_template.render(vars)      # Pass all vaiables to template
+        if '_JSON_BODY' in vars:
+            render_variables = vars['_JSON_BODY']       # All render variables are in the JSON body
+        else:
+            render_variables = vars                     # Just grab whats there (probably noting useful)
+
+        rendered_content = email_template.render(render_variables)      # Pass all variables to template
+
+        if 'mail_subject' in vars:
+            mail_subject = vars['mail_subject']
+        elif '_JSON_BODY' in vars and 'header' in vars['_JSON_BODY']:
+            mail_subject = vars['_JSON_BODY']['header']
+        else:
+            mail_subject = "Meddelande från Haninge Kommun"
 
         # message = EmailMessage()
         message = MIMEMultipart('alternative')
         message["From"] = "NoReply@haninge.se"
         message["To"] = vars['mail_recipient']
-        message["Subject"] = vars['mail_subject'] if 'mail_subject' in vars else "Meddelande från Haninge Kommun"
+        message["Subject"] = mail_subject
         # message.set_content(rendered_content)
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
         message.attach(MIMEText(rendered_content, 'html'))
