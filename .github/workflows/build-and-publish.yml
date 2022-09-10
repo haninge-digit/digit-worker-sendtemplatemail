@@ -9,11 +9,11 @@ on:
   # schedule:
   #   - cron: '21 16 * * *'
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 env:
   REGISTRY: ghcr.io

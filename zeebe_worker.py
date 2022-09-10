@@ -10,6 +10,8 @@ import time
 import grpc
 from zeebe_grpc import gateway_pb2_grpc
 from zeebe_grpc.gateway_pb2 import (
+    Resource,
+    DeployResourceRequest,
     ActivateJobsRequest,
     CompleteJobRequest,
     FailJobRequest,
@@ -25,23 +27,52 @@ SIGTERM = False     # Mutable. Set to True when SIGTERM or SIGINT is recieved
 
 
 """
+Deploy BPMN-workflow to Camunda
+"""
+async def deploy_worker_to_camunda(zeebe_stub, worker_name):
+    if os.path.exists(f"{worker_name}.bpmn"):       # Read the definition file if it exists
+        with open(f"{worker_name}.bpmn", "rb") as process_definition_file:
+            process_definition = process_definition_file.read()
+    else:        # Build from template
+        import jinja2
+        with open(f"worker-template.bpmn.jinja", "r") as f:     # Teample in repo for now
+            template = f.read()
+        process_template = jinja2.Environment().from_string(template)
+        vars = {            # Render variables
+            "processs_id": f"{worker_name}_worker",
+            "process_name": f"{worker_name} Worker",
+            "servicetask_name": f"{worker_name} worker",
+            "task_queue": worker_name
+        }
+        process_definition = str.encode(process_template.render(vars))      # Build the BPMN definition. Encode into byte-string
+
+    process = Resource(name=f"{worker_name}.bpmn",content=process_definition)
+    response = await zeebe_stub.DeployResource(DeployResourceRequest(resources=[process]))
+    logging.info(f"Deployed BPMN process {response.deployments[0].process.bpmnProcessId} as version {response.deployments[0].process.version}")
+
+
+"""
 Worker loop.
 Listens on a topic and asynchronous starts given function with retrieved variables
 """
-async def worker_loop(workfunc, topic=None):
+async def worker_loop(worker_instance, topic=None):
     global SIGTERM
-    worker_tasks = set()
-    worker_id = str(uuid.uuid4().time_low)  # Random worker ID
     signal.signal(signal.SIGINT, signal_handler)        # Catch SIGINT
     signal.signal(signal.SIGTERM, signal_handler)       # and SIGTERM
+
+    worker_tasks = set()
+    worker_id = str(uuid.uuid4().time_low)  # Random worker ID
     if not topic:
-        topic = workfunc.__name__   # Use name of function as topic to listen to
+        topic = worker_instance.queue_name      # Get topic from class
 
     async with grpc.aio.insecure_channel(ZEEBE_ADDRESS) as channel:
         stub = gateway_pb2_grpc.GatewayStub(channel)
         if not await zeebe_is_running(stub):
             return      # Zeebe is not running!
-        logging.info(f"Starting worker. Topic={topic}, Worker={worker_id}")
+
+        await deploy_worker_to_camunda(stub, worker_instance.queue_name)    # Start by deploying worker process to Camunda
+
+        logging.info(f"Starting worker loop. Topic={topic}, Worker={worker_id}")
 
         locktime = 100000   # Jobs should *not* get stuck! 100 seconds lock is just to safeguard against worker crashes, but might cause problems. Jobs are not idempotent...
         poll_time = 20000   # Time in ms to poll Zeebe. Longer than 30 seconds affects pod termination grace period.
@@ -51,7 +82,7 @@ async def worker_loop(workfunc, topic=None):
             logging.debug("Requesting jobs to do")
             async for response in stub.ActivateJobs(ajr):
                 for job in response.jobs:
-                    task = asyncio.create_task(run_worker(workfunc, job, worker_id, stub))         # Schedule an asynchronous task to handle the load. Don't wait for completion.
+                    task = asyncio.create_task(run_worker(worker_instance.worker, job, worker_id, stub))         # Schedule an asynchronous task to handle the load. Don't wait for completion.
                     worker_tasks.add(task)      # Save a reference to the coroutine. This prevents it from beeing garbage collected.
                     task.add_done_callback(worker_tasks.discard)        # Will remove the reference once the task is completed.
 
@@ -69,7 +100,7 @@ Asynchronous function that calls the worker function and completes the job
 Can be more than one of these running
 """
 async def run_worker(workfunc, job, worker_id, stub):
-    logging.info(f"Got a task to do.      Task={workfunc.__name__}, TaskID={job.key}, Worker={worker_id}")
+    logging.info(f"Got a task to do.  TaskID={job.key}, ProcessID={job.bpmnProcessId}, ProcessInstance={job.processInstanceKey}, ElementID={job.elementId}, ElementInstance={job.elementInstanceKey}")
     logging.debug(f"Retries: {job.retries}  Deadline: {job.deadline}  Custom:{job.customHeaders}")
     if job.retries == 0:
         logging.error(f"Got a canceled job?")       # Don't know why these jobs are active?
@@ -80,8 +111,8 @@ async def run_worker(workfunc, job, worker_id, stub):
         worker_vars = json.loads(job.customHeaders)     # These variables are configured in BPMN
         newvars = await workfunc(vars|worker_vars)    # Do the work and get new variables in return
 
-        logging.info(f"Mark task as complete. Task={workfunc.__name__}, TaskID={job.key}, Worker={worker_id}")
         await stub.CompleteJob(CompleteJobRequest(jobKey=job.key, variables=json.dumps(newvars)))   # Mark tas as completed and with new variables
+        logging.info(f"Task marked as complete. TaskID={job.key}")
 
     except WorkerError as e:    # Worker signals some error. Could be temporary (e.retries > 0)
         if e.retries < 0:

@@ -1,3 +1,3 @@
-# propertyinfo worker
+# sendtemplatemail worker
 
 TODO: Add documentation...  :)
