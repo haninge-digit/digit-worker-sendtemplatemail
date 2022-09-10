@@ -43,7 +43,7 @@ class SendTemplateMail(object):
 
 
     async def worker(self, vars):
-        template_str = await self._load_template(vars['mail_template'])
+        template_str = await self._load_template(vars['mailTemplate'])
         email_template = jinja2.Environment().from_string(template_str)
 
         if '_JSON_BODY' in vars:
@@ -58,8 +58,8 @@ class SendTemplateMail(object):
                 return {'_DIGIT_ERROR':f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"}     # We can return an error
             raise WorkerError(f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}", retries=0)       # Fatal! Halt the process
 
-        if 'mail_subject' in vars:
-            mail_subject = vars['mail_subject']
+        if 'mailSubject' in vars:
+            mail_subject = vars['mailSubject']
         elif 'header' in render_variables:
             mail_subject = render_variables['header']
         else:
@@ -68,7 +68,7 @@ class SendTemplateMail(object):
         # message = EmailMessage()
         message = MIMEMultipart('alternative')
         message["From"] = "NoReply@haninge.se"
-        message["To"] = vars['mail_recipient']
+        message["To"] = vars['mailRecipient']
         message["Subject"] = mail_subject
         # message.set_content(rendered_content)
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
