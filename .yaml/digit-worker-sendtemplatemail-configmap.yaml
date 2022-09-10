@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: digit-worker-send-template-mail-config
+  name: digit-worker-sendtemplatemail-config
   namespace: camunda-workers
 data:
   INT_MAIL: <intmail proxy>  # Set to correct value
