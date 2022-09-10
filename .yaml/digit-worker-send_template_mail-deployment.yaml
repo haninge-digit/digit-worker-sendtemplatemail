@@ -3,6 +3,8 @@ apiVersion: apps/v1
 metadata:
   name: send-template-mail
   namespace: camunda-workers
+  labels:
+    app: digit-plattform
 spec:
   replicas: 1
   selector:
@@ -12,6 +14,7 @@ spec:
     metadata:
       labels:
         app: send-template-mail
+        app.kubernetes.io/name: send-template-mail
     spec:
       imagePullSecrets:
       - name: ghcr-pull-secret
