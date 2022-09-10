@@ -32,7 +32,7 @@ Input header variables are the basic set (documented elseware...)
 
 class SendTemplateMail(object):
 
-    queue_name = "send_template_mail"        # Name of the Zeebe task queue. Will also influence the worker process ID and name
+    queue_name = "sendtemplatemail"        # Name of the Zeebe task queue. Will also influence the worker process ID and name
 
 
     """
@@ -51,7 +51,12 @@ class SendTemplateMail(object):
         else:
             render_variables = vars                     # Just grab whats there (probably noting useful)
 
-        rendered_content = email_template.render(render_variables)      # Pass all variables to template
+        try:
+            rendered_content = email_template.render(render_variables)      # Pass all variables to template
+        except:
+            if '_STANDALONE' in vars:   # This is a single worker
+                return {'_DIGIT_ERROR':f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"}     # We can return an error
+            raise WorkerError(f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}", retries=0)       # Fatal! Halt the process
 
         if 'mail_subject' in vars:
             mail_subject = vars['mail_subject']
