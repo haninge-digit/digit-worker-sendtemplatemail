@@ -5,7 +5,7 @@ import uuid
 import json
 import traceback
 import signal
-import time
+import sys
 
 import grpc
 from zeebe_grpc import gateway_pb2_grpc
@@ -68,7 +68,7 @@ async def worker_loop(worker_instance, topic=None):
     async with grpc.aio.insecure_channel(ZEEBE_ADDRESS) as channel:
         stub = gateway_pb2_grpc.GatewayStub(channel)
         if not await zeebe_is_running(stub):
-            return      # Zeebe is not running!
+            sys.exit()      # Zeebe is not running! EXIT!
 
         await deploy_worker_to_camunda(stub, worker_instance.queue_name)    # Start by deploying worker process to Camunda
 
