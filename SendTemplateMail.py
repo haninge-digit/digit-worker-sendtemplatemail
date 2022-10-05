@@ -1,4 +1,5 @@
 import os
+import base64
 import traceback
 import json
 import logging
@@ -6,7 +7,8 @@ import uuid
 
 from zeebe_worker import WorkerError
 
-import httpx
+from msgraph.core import GraphClient
+from azure.identity import ClientSecretCredential
 
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
@@ -14,11 +16,19 @@ from email.mime.text import MIMEText
 
 import jinja2
 
+import httpx
+
+
 """ 
 Environment
 """
-INT_MAIL = os.getenv('INT_MAIL',"")
 TEMPLATE_URL = os.getenv('TEMPLATE_URL',"")
+
+AD_TENANT_ID = os.getenv('AD_TENANT_ID')
+AD_CLIENT_ID = os.getenv('AD_CLIENT_ID')
+AD_CLIENT_SECRET = os.getenv('AD_CLIENT_SECRET')
+
+INT_MAIL = os.getenv('INT_MAIL',"")
 
 
 """
@@ -54,9 +64,11 @@ class SendTemplateMail(object):
         try:
             rendered_content = email_template.render(render_variables)      # Pass all variables to template
         except:
+            loggtext = f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"
+            logging.error(loggtext)
             if '_STANDALONE' in vars:   # This is a single worker
-                return {'_DIGIT_ERROR':f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"}     # We can return an error
-            raise WorkerError(f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}", retries=0)       # Fatal! Halt the process
+                return {'_DIGIT_ERROR': loggtext}     # We can return an error
+            raise WorkerError(loggtext, retries=0)       # Fatal! Halt the process
 
         if 'mailSubject' in vars:
             mail_subject = vars['mailSubject']
@@ -74,11 +86,24 @@ class SendTemplateMail(object):
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
         message.attach(MIMEText(rendered_content, 'html'))
 
-        async with httpx.AsyncClient(timeout=10, verify=False) as client:       # Proxy cert is selfsigned
-            try:
-                await client.post(INT_MAIL, json={'EmailMessage':message.as_string()})       # Send to proxy
-            except httpx.ReadTimeout as e:
-                raise WorkerError(f"send email to proxy raised httpx.ReadTimeout", retry_in=10)       # Timeout. Try again in 10 seconds
+        # async with httpx.AsyncClient(timeout=10, verify=False) as client:       # Proxy cert is selfsigned
+        #     try:
+        #         await client.post(INT_MAIL, json={'EmailMessage':message.as_string()})       # Send to proxy
+        #     except httpx.ReadTimeout as e:
+        #         raise WorkerError(f"send email to proxy raised httpx.ReadTimeout", retry_in=10)       # Timeout. Try again in 10 seconds
+
+        credential = ClientSecretCredential(AD_TENANT_ID, AD_CLIENT_ID, AD_CLIENT_SECRET)
+        client = GraphClient(credential=credential)
+        userPrincipalName = "noreply@haninge.se"
+
+        result = client.post(f"/users/{userPrincipalName}/sendMail", data=base64.b64encode(message.as_string().encode('utf-8')), headers={'Content-Type': 'text/plain'})
+        if 'error' in result:
+            loggtext = f"sendMail failed! {result['error']['code']: {result['error']['message']}}"
+            logging.error(loggtext)
+            if '_STANDALONE' in vars:
+                return {'_DIGIT_ERROR': loggtext}       # This can be returned to the caller
+            else:
+                raise WorkerError(loggtext, retries=0)          # In a worklfow so cancel further processeing
 
         return {}
 
