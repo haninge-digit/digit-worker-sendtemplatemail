@@ -1,16 +1,13 @@
 import os
 import base64
-import traceback
 import json
 import logging
-import uuid
 
 from zeebe_worker import WorkerError
 
 from msgraph.core import GraphClient
 from azure.identity import ClientSecretCredential
 
-from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -53,8 +50,25 @@ class SendTemplateMail(object):
 
 
     async def worker(self, vars):
-        template_str = await self._load_template(vars['mailTemplate'])
-        email_template = jinja2.Environment().from_string(template_str)
+        stand_alone = '_STANDALONE' in vars
+
+        if 'mailRecipient' not in vars:
+            return self._handle_error(stand_alone, "Variable 'mailRecipient' is missing")
+        template_url = vars.get('mailTemplate',"empty_mail.html.jinja")
+        if "https" not in template_url:
+            template_url = f"{TEMPLATE_URL}/{template_url}"     # Add the TEMPLATE_URL prefix
+
+        try:
+            res = await httpx.AsyncClient().get(template_url)
+        except httpx.ReadTimeout as e:
+            return self._handle_error(stand_alone, f"load_template() raised httpx.ReadTimeout")
+        if res.status_code != 200:
+            if res.status_code == 404:
+                return self._handle_error(stand_alone, f"Template {template_url} not found!")
+            else:
+                return self._handle_error(stand_alone, f"get template returned {res.status_code}")
+
+        email_template = jinja2.Environment().from_string(res.text)     # Load template into Jinja
 
         if '_JSON_BODY' in vars:
             render_variables = json.loads(vars['_JSON_BODY'])       # All render variables are in the JSON body as a string
@@ -108,17 +122,10 @@ class SendTemplateMail(object):
         return {}
 
 
-    async def _load_template(self, template_url:str):
-        if "https" not in template_url:
-            template_url = f"{TEMPLATE_URL}/{template_url}"     # Add the TEMPLATE_URL prefix
-
-        try:
-            res = await httpx.AsyncClient().get(template_url)
-        except httpx.ReadTimeout as e:
-            raise WorkerError(f"load_template() raised httpx.ReadTimeout", retry_in=10)       # Timeout. Try again in 10 seconds
-        if res.status_code != 200:
-            raise WorkerError(f"get template returned {res.status_code}", retries=0)          # Something is wrong. Don't try anymore 
-
-        return res.text
-
-
+    def _handle_error(self,stand_alone,loggtext):
+        logging.error(loggtext)
+        if stand_alone:
+            return {'_DIGIT_ERROR': loggtext}       # This can be returned to the caller
+        else:
+            raise WorkerError(loggtext, retries=0)          # In a worklfow so cancel further processeing
+        pass
