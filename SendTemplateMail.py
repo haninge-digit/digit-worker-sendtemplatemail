@@ -54,35 +54,43 @@ class SendTemplateMail(object):
 
         if 'mailRecipient' not in vars:
             return self._handle_error(stand_alone, "Variable 'mailRecipient' is missing")
-        template_url = vars.get('mailTemplate',"empty_mail.html.jinja")
-        if "https" not in template_url:
-            template_url = f"{TEMPLATE_URL}/{template_url}"     # Add the TEMPLATE_URL prefix
 
-        try:
-            res = await httpx.AsyncClient().get(template_url)
-        except httpx.ReadTimeout as e:
-            return self._handle_error(stand_alone, f"load_template() raised httpx.ReadTimeout")
-        if res.status_code != 200:
-            if res.status_code == 404:
-                return self._handle_error(stand_alone, f"Template {template_url} not found!")
+        if 'JSON_DUMP' in vars:         # Just do a JSON-dump of the whole stuff
+            body = json.dumps(json.loads(vars['_JSON_BODY']),indent=2)      # Stupid way to format JSON?   
+            rendered_content = f"<html><head></head><body><pre>{body}</pre></body></html>"
+            if 'mailSubject' not in vars:
+                vars['mailSubject'] = f"JSON DUMP from {self.queue_name} worker"        # We need a mail subject
+
+        else:                           # Normal template parsing
+            template_url = vars.get('mailTemplate',"empty_mail.html.jinja")
+            if "https" not in template_url:
+                template_url = f"{TEMPLATE_URL}/{template_url}"     # Add the TEMPLATE_URL prefix
+
+            try:
+                res = await httpx.AsyncClient().get(template_url)   # Read the teamplate from some external public storage (Github)
+            except httpx.ReadTimeout as e:
+                return self._handle_error(stand_alone, f"load_template() raised httpx.ReadTimeout")
+            if res.status_code != 200:
+                if res.status_code == 404:
+                    return self._handle_error(stand_alone, f"Template {template_url} not found!")
+                else:
+                    return self._handle_error(stand_alone, f"get template returned {res.status_code}")
+
+            email_template = jinja2.Environment().from_string(res.text)     # Load template into Jinja
+
+            if '_JSON_BODY' in vars:
+                render_variables = json.loads(vars['_JSON_BODY'])       # All render variables are in the JSON body as a string
             else:
-                return self._handle_error(stand_alone, f"get template returned {res.status_code}")
+                render_variables = vars                     # Just grab whats there (probably nothing useful)
 
-        email_template = jinja2.Environment().from_string(res.text)     # Load template into Jinja
-
-        if '_JSON_BODY' in vars:
-            render_variables = json.loads(vars['_JSON_BODY'])       # All render variables are in the JSON body as a string
-        else:
-            render_variables = vars                     # Just grab whats there (probably noting useful)
-
-        try:
-            rendered_content = email_template.render(render_variables)      # Pass all variables to template
-        except:
-            loggtext = f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"
-            logging.error(loggtext)
-            if '_STANDALONE' in vars:   # This is a single worker
-                return {'_DIGIT_ERROR': loggtext}     # We can return an error
-            raise WorkerError(loggtext, retries=0)       # Fatal! Halt the process
+            try:
+                rendered_content = email_template.render(render_variables)      # Render the template with Jinja2
+            except:         # Render will fail if data and template doesn't match!
+                loggtext = f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"
+                logging.error(loggtext)
+                if '_STANDALONE' in vars:   # This is a single worker
+                    return {'_DIGIT_ERROR': loggtext}     # We can return an error
+                raise WorkerError(loggtext, retries=0)       # Fatal! Halt the process
 
         if 'mailSubject' in vars:
             mail_subject = vars['mailSubject']
@@ -91,14 +99,12 @@ class SendTemplateMail(object):
         else:
             mail_subject = "Meddelande från Haninge Kommun"
 
-        # message = EmailMessage()
-        message = MIMEMultipart('alternative')
+        message = MIMEMultipart('alternative')          # Create a MIME message
         message["From"] = "NoReply@haninge.se"
-        message["To"] = vars['mailRecipient']
+        message["To"] = vars['mailRecipient']           # Could be one or more comma-seperated recipients
         message["Subject"] = mail_subject
-        # message.set_content(rendered_content)
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
-        message.attach(MIMEText(rendered_content, 'html'))
+        message.attach(MIMEText(rendered_content, 'html'))      # Add the HTML formatted content
 
         # async with httpx.AsyncClient(timeout=10, verify=False) as client:       # Proxy cert is selfsigned
         #     try:
@@ -107,10 +113,12 @@ class SendTemplateMail(object):
         #         raise WorkerError(f"send email to proxy raised httpx.ReadTimeout", retry_in=10)       # Timeout. Try again in 10 seconds
 
         credential = ClientSecretCredential(AD_TENANT_ID, AD_CLIENT_ID, AD_CLIENT_SECRET)
-        client = GraphClient(credential=credential)
-        userPrincipalName = "noreply@haninge.se"
+        client = GraphClient(credential=credential)         # Get a authenticated Graph client. Might be better to have one for the whole worker?
+        userPrincipalName = "noreply@haninge.se"            # This is the user account that our mail are sent from
 
-        result = client.post(f"/users/{userPrincipalName}/sendMail", data=base64.b64encode(message.as_string().encode('utf-8')), headers={'Content-Type': 'text/plain'})
+        result = client.post(f"/users/{userPrincipalName}/sendMail", 
+                            data=base64.b64encode(message.as_string().encode('utf-8')),
+                            headers={'Content-Type': 'text/plain'})
         if 'error' in result:
             loggtext = f"sendMail failed! {result['error']['code']: {result['error']['message']}}"
             logging.error(loggtext)
