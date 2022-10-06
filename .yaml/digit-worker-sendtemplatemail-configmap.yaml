@@ -1,8 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: digit-worker-sendtemplatemail-config
+  name: sendtemplatemail-config
   namespace: camunda-workers
 data:
+  AD_TENANT_ID: <ad tenant id>  # Set to correct value
   INT_MAIL: <intmail proxy>  # Set to correct value
   TEMPLATE_URL: <template URL>  # Set to correct value

@@ -27,6 +27,21 @@ spec:
               value: 'false'  # Change to 'true' for debugging
             - name: ZEEBE_ADDRESS
               value: camunda-zeebe-gateway.camunda-zeebe:26500
+            - name: AD_TENANT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: sendtemplatemail-config
+                  key: AD_TENANT_ID
+            - name: AD_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sendtemplatemail-secret
+                  key: AD_CLIENT_ID
+            - name: AD_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sendtemplatemail-secret
+                  key: AD_CLIENT_SECRET
             - name: INT_MAIL
               valueFrom:
                 configMapKeyRef:
