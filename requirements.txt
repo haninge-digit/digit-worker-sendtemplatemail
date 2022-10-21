@@ -3,7 +3,7 @@ httpx>=0.23.0,<0.24.0
 Jinja2>=3.1.2,<3.2.0
 # The next two are for Zeebe
 zeebe-grpc>=8.0.4,<8.1.0
-grpcio>=1.47.0,<1.49.0
+grpcio>=1.50,<1.51
 # And these two are for MS Graph communication
 msgraph-core>=0.2,<=0.3
 azure-identity>=1.11,<=1.12
