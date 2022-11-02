@@ -85,8 +85,8 @@ class SendTemplateMail(object):
 
             try:
                 rendered_content = email_template.render(render_variables)      # Render the template with Jinja2
-            except:         # Render will fail if data and template doesn't match!
-                loggtext = f"Render failed. Call contained _JSON_BODY = {'_JSON_BODY' in vars}"
+            except Exception as e:         # Render will fail if data and template doesn't match!
+                loggtext = f"Template render failed with error: {e}. Call contained a JSON body = {'_JSON_BODY' in vars}"
                 logging.error(loggtext)
                 if '_STANDALONE' in vars:   # This is a single worker
                     return {'_DIGIT_ERROR': loggtext}     # We can return an error
