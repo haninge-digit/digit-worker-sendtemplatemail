@@ -1,6 +1,7 @@
-# httpx amd Jinja is for the worker
+# httpx, Jinja and weasyprint is for the worker
 httpx>=0.23.0,<0.24.0
 Jinja2>=3.1.2,<3.2.0
+weasyprint==56.1
 # The next two are for Zeebe
 zeebe-grpc>=8.0.4,<8.1.0
 grpcio>=1.50,<1.51

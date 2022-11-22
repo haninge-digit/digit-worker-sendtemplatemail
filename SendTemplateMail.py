@@ -9,9 +9,11 @@ from msgraph.core import GraphClient
 from azure.identity import ClientSecretCredential
 
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 
 import jinja2
+import weasyprint
 
 import httpx
 
@@ -92,6 +94,11 @@ class SendTemplateMail(object):
                     return {'_DIGIT_ERROR': loggtext}     # We can return an error
                 raise WorkerError(loggtext, retries=0)       # Fatal! Halt the process
 
+        if 'ATTACH_PDF' in vars:        # Ww can also check for things like "ATTACH_PDF=email" meaning the content of the email as PDF
+            pdf = weasyprint.HTML(string=rendered_content).write_pdf()      # Which is the only thing we implemen right now
+        else:
+            pdf = None
+
         if 'mailSubject' in vars:
             mail_subject = vars['mailSubject']
         elif 'header' in render_variables:
@@ -105,12 +112,10 @@ class SendTemplateMail(object):
         message["Subject"] = mail_subject
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
         message.attach(MIMEText(rendered_content, 'html'))      # Add the HTML formatted content
-
-        # async with httpx.AsyncClient(timeout=10, verify=False) as client:       # Proxy cert is selfsigned
-        #     try:
-        #         await client.post(INT_MAIL, json={'EmailMessage':message.as_string()})       # Send to proxy
-        #     except httpx.ReadTimeout as e:
-        #         raise WorkerError(f"send email to proxy raised httpx.ReadTimeout", retry_in=10)       # Timeout. Try again in 10 seconds
+        if pdf:
+            attachment = MIMEApplication(pdf,'application/pdf')
+            attachment.add_header('Content-Disposition', 'attachment', filename=f"{mail_subject}.pdf")
+            message.attach(attachment)            
 
         credential = ClientSecretCredential(AD_TENANT_ID, AD_CLIENT_ID, AD_CLIENT_SECRET)
         client = GraphClient(credential=credential)         # Get a authenticated Graph client. Might be better to have one for the whole worker?
