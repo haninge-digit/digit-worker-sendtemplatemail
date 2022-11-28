@@ -27,8 +27,6 @@ AD_TENANT_ID = os.getenv('AD_TENANT_ID')
 AD_CLIENT_ID = os.getenv('AD_CLIENT_ID')
 AD_CLIENT_SECRET = os.getenv('AD_CLIENT_SECRET')
 
-INT_MAIL = os.getenv('INT_MAIL',"")
-
 
 """
 This is the SendTemplateMail worker class.

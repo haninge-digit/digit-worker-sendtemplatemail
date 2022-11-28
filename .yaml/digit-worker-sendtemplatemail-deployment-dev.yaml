@@ -29,24 +29,19 @@ spec:
               value: camunda-zeebe-gateway.camunda-zeebe:26500
             - name: AD_TENANT_ID
               valueFrom:
-                configMapKeyRef:
-                  name: sendtemplatemail-config
+                secretKeyRef:
+                  name: ms365mail-secret
                   key: AD_TENANT_ID
             - name: AD_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: sendtemplatemail-secret
+                  name: ms365mail-secret
                   key: AD_CLIENT_ID
             - name: AD_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: sendtemplatemail-secret
+                  name: ms365mail-secret
                   key: AD_CLIENT_SECRET
-            - name: INT_MAIL
-              valueFrom:
-                configMapKeyRef:
-                  name: sendtemplatemail-config
-                  key: INT_MAIL
             - name: TEMPLATE_URL
               valueFrom:
                 configMapKeyRef:
