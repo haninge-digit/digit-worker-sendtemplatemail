@@ -5,7 +5,6 @@ import uuid
 import json
 import traceback
 import signal
-import sys
 
 import grpc
 from zeebe_grpc import gateway_pb2_grpc
@@ -68,7 +67,7 @@ async def worker_loop(worker_instance, topic=None):
     async with grpc.aio.insecure_channel(ZEEBE_ADDRESS) as channel:
         stub = gateway_pb2_grpc.GatewayStub(channel)
         if not await zeebe_is_running(stub):
-            sys.exit()      # Zeebe is not running! EXIT!
+            return      # Zeebe is not running!
 
         await deploy_worker_to_camunda(stub, worker_instance.queue_name)    # Start by deploying worker process to Camunda
 
@@ -78,13 +77,16 @@ async def worker_loop(worker_instance, topic=None):
         poll_time = 20000   # Time in ms to poll Zeebe. Longer than 30 seconds affects pod termination grace period.
         ajr = ActivateJobsRequest(type=topic,worker=worker_id,timeout=locktime,
                                   maxJobsToActivate=1,requestTimeout=poll_time)
-        while not SIGTERM:     # Loop until terminated
-            logging.debug("Requesting jobs to do")
-            async for response in stub.ActivateJobs(ajr):
-                for job in response.jobs:
-                    task = asyncio.create_task(run_worker(worker_instance.worker, job, worker_id, stub))         # Schedule an asynchronous task to handle the load. Don't wait for completion.
-                    worker_tasks.add(task)      # Save a reference to the coroutine. This prevents it from beeing garbage collected.
-                    task.add_done_callback(worker_tasks.discard)        # Will remove the reference once the task is completed.
+        try:
+            while not SIGTERM:     # Loop until terminated or Zeebe error
+                logging.debug("Requesting jobs to do")
+                async for response in stub.ActivateJobs(ajr):
+                    for job in response.jobs:
+                        task = asyncio.create_task(run_worker(worker_instance.worker, job, worker_id, stub))         # Schedule an asynchronous task to handle the load. Don't wait for completion.
+                        worker_tasks.add(task)      # Save a reference to the coroutine. This prevents it from beeing garbage collected.
+                        task.add_done_callback(worker_tasks.discard)        # Will remove the reference once the task is completed.
+        except grpc.aio.AioRpcError as grpc_error:      # Something failed withe Zeebe
+            handle_grpc_errors(grpc_error,"in worker loop")
 
     # Time to terminate worker
     logging.info(f"Async workers runnning: {len(worker_tasks)}")

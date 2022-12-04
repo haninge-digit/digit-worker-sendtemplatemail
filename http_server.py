@@ -52,4 +52,4 @@ async def http_server(worker):
     site = web.TCPSite(runner, port=HTTP_SERVER_PORT)
     await site.start()
 
-    return runner
+    return site
