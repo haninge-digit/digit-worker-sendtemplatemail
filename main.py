@@ -23,15 +23,15 @@ async def main():
     # Enable logging. INFO is default. DEBUG if requested
     logging.basicConfig(level=logging.DEBUG if DEBUG_MODE else logging.INFO, format=LOGFORMAT)
 
-    userinfo_worker = SendTemplateMail()           # Create an instance of the worker
+    worker = SendTemplateMail()           # Create an instance of the worker
 
     if RUN_HTTP_SERVER:
         from http_server import http_server
-        site = await http_server(userinfo_worker)        # Create http server
+        site = await http_server(worker)        # Create http server
 
     if RUN_ZEEBE_LOOP:
         from zeebe_worker import worker_loop
-        await worker_loop(userinfo_worker)       # Create and run Zeebe worker loop
+        await worker_loop(worker)       # Create and run Zeebe worker loop
     
     else:
         while True:
