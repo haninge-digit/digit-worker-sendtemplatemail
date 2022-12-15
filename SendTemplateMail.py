@@ -125,6 +125,8 @@ class SendTemplateMail(object):
         except Exception as e:         # Some error
             loggtext = f"Send mail failed with error: {e}"
             self._handle_worker_error(stand_alone, loggtext)
+        
+        logging.info(f"Sent mail to {vars['mailRecipient']} with {mail_subject=}")
 
         return {}
 
