@@ -9,9 +9,11 @@ from msgraph.core import GraphClient
 from azure.identity import ClientSecretCredential
 
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 
 import jinja2
+import weasyprint
 
 import httpx
 
@@ -24,8 +26,6 @@ TEMPLATE_URL = os.getenv('TEMPLATE_URL',"")
 AD_TENANT_ID = os.getenv('AD_TENANT_ID')
 AD_CLIENT_ID = os.getenv('AD_CLIENT_ID')
 AD_CLIENT_SECRET = os.getenv('AD_CLIENT_SECRET')
-
-INT_MAIL = os.getenv('INT_MAIL',"")
 
 
 """
@@ -88,6 +88,10 @@ class SendTemplateMail(object):
             except Exception as e:         # Render will fail if data and template doesn't match!
                 loggtext = f"Template render failed with error: {e}. Call contained a JSON body = {'_JSON_BODY' in vars}"
                 self._handle_worker_error(stand_alone, loggtext)
+        if 'ATTACH_PDF' in vars:        # Ww can also check for things like "ATTACH_PDF=email" meaning the content of the email as PDF
+            pdf = weasyprint.HTML(string=rendered_content).write_pdf()      # Which is the only thing we implemen right now
+        else:
+            pdf = None
 
         if 'mailSubject' in vars:
             mail_subject = vars['mailSubject']
@@ -102,6 +106,10 @@ class SendTemplateMail(object):
         message["Subject"] = mail_subject
         message.attach(MIMEText("Kontakta digit@haninge.se om du ser den här texten!", 'plain'))
         message.attach(MIMEText(rendered_content, 'html'))      # Add the HTML formatted content
+        if pdf:
+            attachment = MIMEApplication(pdf,'application/pdf')
+            attachment.add_header('Content-Disposition', 'attachment', filename=f"{mail_subject}.pdf")
+            message.attach(attachment)  
 
         try:
             credential = ClientSecretCredential(AD_TENANT_ID, AD_CLIENT_ID, AD_CLIENT_SECRET)
